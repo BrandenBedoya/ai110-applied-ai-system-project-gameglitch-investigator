@@ -9,6 +9,7 @@ Three-tab Streamlit app:
 """
 from __future__ import annotations
 
+import logging
 import os
 import random
 
@@ -16,6 +17,15 @@ import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Configure logging — writes INFO+ to the console (visible in the terminal running Streamlit)
+# and DEBUG+ for the agent module so tool calls and API interactions are always traceable.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-8s  %(name)s — %(message)s",
+    datefmt="%H:%M:%S",
+)
+logging.getLogger("src.agent.debug_agent").setLevel(logging.DEBUG)
 
 ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 

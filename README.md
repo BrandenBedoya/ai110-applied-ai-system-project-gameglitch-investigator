@@ -308,6 +308,8 @@ caches it server-side for up to 5 minutes, reducing both latency and token cost 
 
 ## Testing Summary
 
+**Results:** 51/51 local tests pass (no API key required). The RAG retriever returns the correct pattern as the top result for 5/5 known query types. End-to-end agent evaluation against 5 bug scenarios averages ~80% on the keyword + type-match scoring rubric; the agent's main failure mode is using valid synonyms that fall outside the expected keyword list rather than misidentifying the bug.
+
 **What was tested:**
 - 22 unit tests covering game logic (all Module 1 regression cases pass) and Pydantic validators
 - 9 retriever accuracy tests confirming the correct pattern ranks first for known queries

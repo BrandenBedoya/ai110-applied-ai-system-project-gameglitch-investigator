@@ -13,11 +13,14 @@ Prompt caching is enabled on the static system prompt to reduce latency and cost
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any
 
 from src.agent.prompts import ANALYSIS_PROMPT_TEMPLATE, SYSTEM_PROMPT
 from src.rag.retriever import BugRetriever
+
+logger = logging.getLogger(__name__)
 
 # ── Lazy singletons (avoids import-time failures if key is missing) ────────────
 
@@ -126,6 +129,12 @@ def analyze_code(code: str, context: str = "") -> dict:
       - iterations (int): Number of agentic loop iterations.
       - model (str): Model used.
     """
+    logger.info(
+        "analyze_code | code_length=%d chars | has_context=%s",
+        len(code),
+        bool(context),
+    )
+
     client = _get_client()
 
     messages: list[dict] = [
@@ -151,13 +160,19 @@ def analyze_code(code: str, context: str = "") -> dict:
     max_iterations = 6
 
     for iteration in range(1, max_iterations + 1):
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=4096,
-            system=system,
-            tools=_TOOLS,
-            messages=messages,
-        )
+        logger.debug("Agent iteration %d/%d", iteration, max_iterations)
+
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=4096,
+                system=system,
+                tools=_TOOLS,
+                messages=messages,
+            )
+        except Exception as exc:
+            logger.error("API call failed on iteration %d: %s", iteration, exc)
+            raise
 
         tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
 
@@ -165,6 +180,12 @@ def analyze_code(code: str, context: str = "") -> dict:
         if not tool_use_blocks:
             final_text = "\n\n".join(
                 b.text for b in response.content if b.type == "text"
+            )
+            logger.info(
+                "Analysis complete | iterations=%d | tool_calls=%d | report_length=%d chars",
+                iteration,
+                len(tool_calls_made),
+                len(final_text),
             )
             return {
                 "report": final_text.strip(),
@@ -176,7 +197,13 @@ def analyze_code(code: str, context: str = "") -> dict:
         # Execute each tool call and build the result list
         tool_results: list[dict] = []
         for tu in tool_use_blocks:
+            logger.debug(
+                "Tool call: %s | query=%r", tu.name, tu.input.get("query", "")
+            )
             result_text = _execute_tool(tu.name, tu.input)
+            logger.debug(
+                "Tool result: %d chars returned", len(result_text)
+            )
             tool_calls_made.append(
                 {
                     "tool": tu.name,
@@ -197,6 +224,11 @@ def analyze_code(code: str, context: str = "") -> dict:
         messages.append({"role": "user", "content": tool_results})
 
     # Safety fallback — should not normally be reached
+    logger.warning(
+        "Max iterations (%d) reached without final answer | tool_calls=%d",
+        max_iterations,
+        len(tool_calls_made),
+    )
     return {
         "report": (
             "Analysis hit the maximum iteration limit. "
