@@ -1,0 +1,98 @@
+[
+  {
+    "id": "pp-001",
+    "category": "logic_error",
+    "title": "Mutable Default Argument",
+    "description": "Using a mutable object (list, dict, set) as a default argument value. The same object is shared across all calls — mutations persist between calls.",
+    "symptoms": "A list or dict default parameter accumulates values across separate function calls. Results differ on the second call vs the first even with the same inputs.",
+    "code_smell": "def f(x, items=[]) or def f(x, config={}) — mutable object in the signature default",
+    "fix": "Use None as the default and create the mutable object inside the function body.",
+    "example_fix": "def f(x, items=None):\n    if items is None:\n        items = []\n    items.append(x)\n    return items",
+    "tags": ["mutable", "default", "argument", "parameter", "list", "dict", "shared", "state", "persistent"],
+    "severity": "high"
+  },
+  {
+    "id": "pp-002",
+    "category": "logic_error",
+    "title": "Late Binding in Loop Closures",
+    "description": "Lambda or nested functions created inside a loop capture the loop variable by reference, not by value. All closures see the variable's final value after the loop ends.",
+    "symptoms": "A list of lambdas or callbacks all produce the same output — the last value the loop variable held.",
+    "code_smell": "funcs = [lambda: i for i in range(5)] — every lambda returns 4",
+    "fix": "Capture the current value as a default argument: lambda i=i: i",
+    "example_fix": "funcs = [lambda i=i: i for i in range(5)]\n# Now funcs[0]() == 0, funcs[4]() == 4",
+    "tags": ["closure", "lambda", "loop", "late binding", "capture", "reference", "scope", "callback"],
+    "severity": "medium"
+  },
+  {
+    "id": "pp-003",
+    "category": "control_flow",
+    "title": "Bare Except Clause Swallows All Errors",
+    "description": "Using 'except:' without specifying an exception type catches everything, including KeyboardInterrupt, SystemExit, and GeneratorExit. Critical signals are silenced.",
+    "symptoms": "Ctrl+C does not interrupt the program. Bugs are hidden because every exception is swallowed silently.",
+    "code_smell": "try: ... except: pass or try: ... except: continue",
+    "fix": "Always name the specific exception type(s) you intend to handle.",
+    "example_fix": "try:\n    result = int(user_input)\nexcept ValueError:\n    print('Not a valid number')",
+    "tags": ["except", "bare", "catch", "exception", "KeyboardInterrupt", "SystemExit", "broad", "swallow"],
+    "severity": "high"
+  },
+  {
+    "id": "pp-004",
+    "category": "logic_error",
+    "title": "Identity Check Used for Value Comparison",
+    "description": "Using 'is' or 'is not' to compare integers, strings, or booleans. 'is' tests object identity (same memory address), not value equality.",
+    "symptoms": "Comparison returns False for values that look equal, or returns True inconsistently depending on Python's object interning.",
+    "code_smell": "if x is 5: or if name is 'player1': — 'is' used with non-None values",
+    "fix": "Use == for value comparison. Reserve 'is' exclusively for None checks.",
+    "example_fix": "if x == 5:          # value comparison — correct\nif name == 'player': # value comparison — correct\nif result is None:   # identity check — the only correct use of 'is'",
+    "tags": ["is", "identity", "equality", "comparison", "value", "integer", "string", "boolean", "interning"],
+    "severity": "medium"
+  },
+  {
+    "id": "pp-005",
+    "category": "logic_error",
+    "title": "Floor Division vs True Division Confusion",
+    "description": "In Python 3, the / operator always returns a float even when both operands are integers. Code expecting integer results (scores, indices, counts) silently receives floats.",
+    "symptoms": "A score or counter gets an unexpected .0 suffix. Comparisons against int values fail because 5.0 != 5 in strict type checking.",
+    "code_smell": "score = total / rounds — returns float when int is expected",
+    "fix": "Use // for integer (floor) division when a whole-number result is required.",
+    "example_fix": "score = total_points // num_rounds  # integer division\nratio = total_points / num_rounds   # float division — intentional",
+    "tags": ["division", "float", "integer", "python3", "floor", "//", "/", "arithmetic", "truncation"],
+    "severity": "medium"
+  },
+  {
+    "id": "pp-006",
+    "category": "logic_error",
+    "title": "Shadowing a Python Built-in Name",
+    "description": "Naming a variable the same as a Python built-in (list, dict, input, id, type, range, etc.) hides the built-in for the rest of the scope.",
+    "symptoms": "TypeError: 'list' object is not callable, or unexpected behaviour when code that relied on the built-in runs later in the same scope.",
+    "code_smell": "list = [1, 2, 3] or input = st.text_input(...) or id = record.id",
+    "fix": "Rename the variable to avoid collision with the built-in: items, user_input, record_id.",
+    "example_fix": "# Problematic:\nlist = get_scores()\nprint(list([1, 2]))  # TypeError!\n\n# Fixed:\nscores = get_scores()\nprint(list([1, 2]))  # works fine",
+    "tags": ["shadow", "built-in", "list", "input", "id", "type", "range", "name", "collision", "override"],
+    "severity": "medium"
+  },
+  {
+    "id": "pp-007",
+    "category": "logic_error",
+    "title": "Mutating a List While Iterating Over It",
+    "description": "Adding or removing items from a list inside a for loop that iterates over the same list causes elements to be skipped or visited twice.",
+    "symptoms": "Some items are never processed, the loop terminates early, or it iterates more times than the list length.",
+    "code_smell": "for item in my_list: my_list.remove(item) or my_list.append(new_item)",
+    "fix": "Iterate over a copy of the list, or collect changes and apply them after the loop.",
+    "example_fix": "# Iterate over a copy:\nfor item in my_list[:]:\n    if should_remove(item):\n        my_list.remove(item)",
+    "tags": ["list", "iterate", "modify", "loop", "remove", "append", "mutation", "skip", "concurrent"],
+    "severity": "high"
+  },
+  {
+    "id": "pp-008",
+    "category": "input_validation",
+    "title": "Unguarded Dictionary Key Access",
+    "description": "Accessing a dictionary key directly with dict[key] raises KeyError if the key is absent. No default handling causes crashes on unexpected input.",
+    "symptoms": "KeyError exception when a key doesn't exist. Program crashes on first missing or unexpected dictionary entry.",
+    "code_smell": "config['difficulty'] or data['score'] without existence check",
+    "fix": "Use dict.get(key, default) for optional keys, or check 'key in dict' before accessing.",
+    "example_fix": "difficulty = config.get('difficulty', 'Normal')\nif 'score' in data:\n    score = data['score']",
+    "tags": ["dict", "dictionary", "KeyError", "key", "access", "get", "missing", "default", "guard"],
+    "severity": "medium"
+  }
+]

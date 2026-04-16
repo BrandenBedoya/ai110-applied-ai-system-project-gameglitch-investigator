@@ -1,8 +1,13 @@
 """
-RAG retriever — bug pattern knowledge base with TF-IDF + cosine similarity.
+RAG retriever — multi-source bug pattern knowledge base with TF-IDF + cosine similarity.
 
-No external model downloads required. Uses scikit-learn's TfidfVectorizer
-to build a sparse index over the bug pattern corpus at startup.
+RAG Enhancement (stretch feature):
+  Two JSON sources are indexed together, giving the retriever broader coverage:
+    - game_bugs       → bug_patterns.json    (15 Streamlit/game-specific patterns)
+    - python_pitfalls → python_pitfalls.json (8 general Python anti-patterns)
+
+  Each result includes a 'source' field so callers can see which KB it came from.
+  No external model downloads required.
 """
 from __future__ import annotations
 
@@ -13,20 +18,26 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-_PATTERNS_PATH = Path(__file__).parent / "bug_patterns.json"
+# ── Data sources ──────────────────────────────────────────────────────────────
+
+_PATTERN_SOURCES: dict[str, Path] = {
+    "game_bugs": Path(__file__).parent / "bug_patterns.json",
+    "python_pitfalls": Path(__file__).parent / "python_pitfalls.json",
+}
 
 
 class BugRetriever:
     """
-    Retrieves the most relevant bug patterns for a given query.
+    Retrieves the most relevant bug patterns across all configured sources.
 
     Usage:
         retriever = BugRetriever()
-        results = retriever.retrieve("backwards hint logic", top_k=3)
+        results = retriever.retrieve("mutable default argument", top_k=3)
+        # Each result includes a 'source' field: 'game_bugs' or 'python_pitfalls'
     """
 
     def __init__(self) -> None:
-        self.patterns = self._load_patterns()
+        self.patterns = self._load_all_patterns()
         self._vectorizer = TfidfVectorizer(
             stop_words="english",
             ngram_range=(1, 2),
@@ -36,12 +47,19 @@ class BugRetriever:
 
     # ── Private helpers ──────────────────────────────────────────────────────
 
-    def _load_patterns(self) -> list[dict]:
-        with open(_PATTERNS_PATH, encoding="utf-8") as f:
-            return json.load(f)
+    def _load_all_patterns(self) -> list[dict]:
+        """Load and tag patterns from every configured source file."""
+        all_patterns: list[dict] = []
+        for source_name, path in _PATTERN_SOURCES.items():
+            with open(path, encoding="utf-8") as f:
+                patterns: list[dict] = json.load(f)
+            for p in patterns:
+                p["source"] = source_name  # tag so callers know the origin
+            all_patterns.extend(patterns)
+        return all_patterns
 
     def _pattern_to_doc(self, p: dict) -> str:
-        """Concatenate all searchable fields into a single string."""
+        """Concatenate all searchable fields into one string for TF-IDF."""
         tags = " ".join(p.get("tags", []))
         return (
             f"{p['title']} {p['description']} {p['symptoms']} "
@@ -56,10 +74,11 @@ class BugRetriever:
 
     def retrieve(self, query: str, top_k: int = 3) -> list[dict]:
         """
-        Return the top_k most relevant bug patterns for *query*.
+        Return the top_k most relevant patterns across all sources for *query*.
 
-        Each result is a copy of the pattern dict with an added
-        'relevance_score' key (0.0 – 1.0).
+        Each result is a copy of the pattern dict with two added keys:
+          - 'relevance_score' (float 0.0–1.0)
+          - 'source' (str: 'game_bugs' | 'python_pitfalls')
         """
         query_vec = self._vectorizer.transform([query])
         scores: np.ndarray = cosine_similarity(query_vec, self._index).flatten()
@@ -74,9 +93,13 @@ class BugRetriever:
         return results
 
     def get_all_categories(self) -> list[str]:
-        """Return a sorted list of unique bug categories."""
+        """Return sorted unique bug categories across all sources."""
         return sorted({p["category"] for p in self.patterns})
 
     def get_by_category(self, category: str) -> list[dict]:
-        """Return all patterns matching a given category."""
+        """Return all patterns matching a category across all sources."""
         return [p for p in self.patterns if p["category"] == category]
+
+    def get_sources(self) -> list[str]:
+        """Return the list of loaded source names."""
+        return list(_PATTERN_SOURCES.keys())

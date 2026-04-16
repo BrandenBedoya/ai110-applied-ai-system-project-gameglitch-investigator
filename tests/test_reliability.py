@@ -20,6 +20,8 @@ class TestRetriever:
     def setup(self):
         self.retriever = BugRetriever()
 
+    # ── Core retrieval ────────────────────────────────────────────────────────
+
     def test_patterns_loaded(self):
         assert len(self.retriever.patterns) >= 10
 
@@ -62,6 +64,48 @@ class TestRetriever:
     def test_get_by_category_filters_correctly(self):
         results = self.retriever.get_by_category("type_error")
         assert all(r["category"] == "type_error" for r in results)
+
+    # ── RAG Enhancement: multi-source tests ───────────────────────────────────
+
+    def test_both_sources_loaded(self):
+        """RAG Enhancement: retriever must load from both JSON sources."""
+        sources = {p["source"] for p in self.retriever.patterns}
+        assert "game_bugs" in sources, "game_bugs source missing"
+        assert "python_pitfalls" in sources, "python_pitfalls source missing"
+
+    def test_total_pattern_count_includes_both_sources(self):
+        """RAG Enhancement: combined corpus should have 23 patterns (15 + 8)."""
+        assert len(self.retriever.patterns) == 23
+
+    def test_python_pitfall_retrievable(self):
+        """
+        RAG Enhancement — measurable improvement:
+        Before: query 'mutable default argument list parameter' returned 0 results
+                (no game-specific pattern matched it).
+        After:  pp-001 from python_pitfalls source is returned in top results.
+        """
+        results = self.retriever.retrieve("mutable default argument list parameter", top_k=3)
+        ids = [r["id"] for r in results]
+        assert "pp-001" in ids, (
+            "Expected pp-001 (Mutable Default Argument) from python_pitfalls source"
+        )
+
+    def test_python_pitfall_results_include_source_field(self):
+        """RAG Enhancement: results must carry a 'source' field for attribution."""
+        results = self.retriever.retrieve("mutable default argument", top_k=3)
+        assert all("source" in r for r in results)
+
+    def test_bare_except_retrievable_from_pitfalls(self):
+        """RAG Enhancement: general Python pattern from second source is reachable."""
+        results = self.retriever.retrieve("bare except clause swallow exception", top_k=3)
+        ids = [r["id"] for r in results]
+        assert "pp-003" in ids
+
+    def test_cross_source_query_returns_mixed_results(self):
+        """RAG Enhancement: a broad query can return patterns from both sources."""
+        results = self.retriever.retrieve("logic error comparison wrong", top_k=5)
+        sources = {r["source"] for r in results}
+        assert len(sources) > 1, "Expected results from more than one source for a broad query"
 
 
 # ── Agent reliability tests (require API key) ─────────────────────────────────

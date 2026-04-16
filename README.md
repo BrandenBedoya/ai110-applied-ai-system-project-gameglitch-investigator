@@ -356,6 +356,59 @@ See [reflection.md](reflection.md) for the full design and collaboration notes.
 
 ---
 
+## Stretch Features
+
+### RAG Enhancement (+2) — Multi-Source Knowledge Base
+
+The retriever was extended from one data source to two:
+
+| Source | File | Patterns | Coverage |
+|---|---|---|---|
+| `game_bugs` | `bug_patterns.json` | 15 | Streamlit + game-specific bugs |
+| `python_pitfalls` | `python_pitfalls.json` | 8 | General Python anti-patterns |
+
+**Measurable improvement — before vs after:**
+
+*Query: `"mutable default argument list parameter"`*
+
+| | Results |
+|---|---|
+| **Before** (single source) | 0 patterns found — no game-specific pattern matched |
+| **After** (multi-source) | `pp-001` — Mutable Default Argument (score: 0.38) returned from `python_pitfalls` |
+
+Each result now includes a `source` field so the agent and UI can show which knowledge base
+the pattern came from. The combined 23-pattern corpus is verified by 6 dedicated retriever tests.
+
+---
+
+### Agentic Workflow Enhancement (+2) — Two-Tool Observable Chain
+
+A second tool, `suggest_test_case`, was added to the agent. The updated workflow creates a
+**three-step observable chain**:
+
+```
+Step 1 → search_bug_patterns(query="...")
+           ↓ returns ranked patterns from both KB sources
+Step 2 → suggest_test_case(function_name="...", bug_description="...", expected_behavior="...")
+           ↓ returns a pytest regression test skeleton (generated locally, no extra API call)
+Step 3 → Final Bug Report
+           ↓ includes both the analysis AND the generated test under "Regression Test"
+```
+
+**What the agent trace shows after the enhancement:**
+
+```
+Tool 1: search_bug_patterns  | query: "hint messages reversed direction"
+Tool 2: suggest_test_case    | function_name: "check_guess"
+                             | bug_description: "hint messages are reversed"
+                             | expected_behavior: "return Go LOWER when guess > secret"
+```
+
+Every intermediate step is visible in the "Agent trace" expander in the AI Bug Lab tab.
+The generated test skeleton gives the developer an immediate starting point for a regression test.
+
+---
+
 ## Improvements Over Module 1
 
 | Area | Module 1 | v2 (Capstone) |

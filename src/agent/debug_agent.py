@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from typing import Any
 
 from src.agent.prompts import ANALYSIS_PROMPT_TEMPLATE, SYSTEM_PROMPT
@@ -50,10 +51,10 @@ _TOOLS: list[dict] = [
     {
         "name": "search_bug_patterns",
         "description": (
-            "Search the GameGlitch knowledge base for bug patterns similar to what "
-            "you are observing in the code. Use descriptive queries such as "
-            "'backwards hint logic streamlit' or 'type mismatch int string comparison'. "
-            "Returns up to top_k ranked patterns with descriptions and fix examples."
+            "Search the GameGlitch knowledge base (game bugs + Python pitfalls) for patterns "
+            "similar to what you are observing in the code. Use descriptive queries such as "
+            "'backwards hint logic streamlit' or 'mutable default argument list'. "
+            "Returns up to top_k ranked patterns with descriptions, fix examples, and source."
         ),
         "input_schema": {
             "type": "object",
@@ -70,11 +71,63 @@ _TOOLS: list[dict] = [
             },
             "required": ["query"],
         },
-    }
+    },
+    {
+        "name": "suggest_test_case",
+        "description": (
+            "Generate a pytest regression test skeleton for the highest-severity bug found. "
+            "Call this after identifying the main bug. Returns a ready-to-fill-in test function "
+            "that the developer can use to prevent the bug from regressing."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "function_name": {
+                    "type": "string",
+                    "description": "Name of the function that contains the bug (e.g. 'check_guess').",
+                },
+                "bug_description": {
+                    "type": "string",
+                    "description": "One-sentence summary of the bug (e.g. 'hint messages are reversed').",
+                },
+                "expected_behavior": {
+                    "type": "string",
+                    "description": "What the function should do correctly (e.g. 'return Go LOWER when guess > secret').",
+                },
+            },
+            "required": ["function_name", "bug_description", "expected_behavior"],
+        },
+    },
 ]
 
 
 # ── Tool execution ─────────────────────────────────────────────────────────────
+
+
+def _build_test_skeleton(function_name: str, bug_description: str, expected_behavior: str) -> str:
+    """Generate a pytest regression test skeleton — no API call required."""
+    safe_name = re.sub(r"[^a-z0-9]+", "_", function_name.lower()).strip("_")
+    return (
+        f"```python\n"
+        f"def test_{safe_name}_regression():\n"
+        f'    """\n'
+        f"    Regression test — added after fixing: {bug_description}\n"
+        f"    Expected: {expected_behavior}\n"
+        f'    """\n'
+        f"    # TODO: import the function and fill in real test values\n"
+        f"    # from src.game.logic_utils import {function_name}  # adjust path\n"
+        f"\n"
+        f"    # Arrange — set up inputs that trigger the bug\n"
+        f"    # ...\n"
+        f"\n"
+        f"    # Act\n"
+        f"    result = {function_name}(...)\n"
+        f"\n"
+        f"    # Assert — verify the corrected behaviour\n"
+        f"    # Example: assert result == expected, f\"Got {{result!r}}\"\n"
+        f"    raise NotImplementedError('Replace this line with your assertions')\n"
+        f"```"
+    )
 
 
 def _execute_tool(tool_name: str, tool_input: dict) -> str:
@@ -85,6 +138,14 @@ def _execute_tool(tool_name: str, tool_input: dict) -> str:
         if not results:
             return "No matching patterns found in the knowledge base for this query."
         return json.dumps(results, indent=2)
+
+    if tool_name == "suggest_test_case":
+        return _build_test_skeleton(
+            function_name=tool_input.get("function_name", "unknown_function"),
+            bug_description=tool_input.get("bug_description", ""),
+            expected_behavior=tool_input.get("expected_behavior", ""),
+        )
+
     return f"Unknown tool: {tool_name}"
 
 
