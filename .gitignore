@@ -1,43 +1,14 @@
-# Byte-compiled / cache files
+.env
 __pycache__/
-*.py[cod]
-*$py.class
-
-# Virtual environments
+*.pyc
+*.pyo
+.pytest_cache/
+.streamlit/
+eval_results.json
+*.egg-info/
 .venv/
 venv/
 env/
-ENV/
-.conda/
-*.egg-info/
-.eggs/
-pip-wheel-metadata/
-
-# Environment and config
-.env
-.env.*
-*.env
-
-# Streamlit
-.streamlit/secrets.toml
-
-# Test and coverage artifacts
-.pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
-nosetests.xml
-coverage.xml
-
-# Logs
-*.log
-
-# OS generated files
+dist/
+build/
 .DS_Store
-Thumbs.db
-
-# Editor and IDE settings
-.vscode/
-.idea/
-*.swp
-*.swo

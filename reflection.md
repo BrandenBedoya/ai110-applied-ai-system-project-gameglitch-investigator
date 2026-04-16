@@ -1,53 +1,129 @@
-# 💭 Reflection: Game Glitch Investigator
+# Reflection — GameGlitch Investigator v2
 
-Answer each question in 3 to 5 sentences. Be specific and honest about what actually happened while you worked. This is about your process, not trying to sound perfect.
-
-## 1. What was broken when you started?
-
-When I first played the game, I guessed the number 1 (with a range of 1-100) and the game told me to "go lower"—which is impossible since 1 is already the minimum. The hints were completely backwards: when my guess was too high, it told me to go higher, and vice versa. Additionally, there was a string conversion bug on even-numbered attempts that was breaking the comparison logic between the guess and the secret number, preventing accurate game feedback.
-
----
-
-## 2. How did you use AI as a teammate?
-
-I used **GitHub Copilot** (in both inline chat and Agent mode) extensively throughout this project. 
-
-**Correct AI Suggestion:** When I asked Copilot to identify the backwards hint logic, it correctly suggested that the `check_guess()` function had the messages inverted—when `guess > secret`, the condition labeled it "Too High" but the message said "Go HIGHER!" I verified this was correct by playing the game: when I guessed 50 for a secret of 25, the game incorrectly told me to "go higher." Copilot's suggestion led directly to fixing the condition and reversing the hint messages.
-
-**Refactoring with Agent Mode:** Copilot Agent mode successfully moved all four logic functions (`check_guess`, `parse_guess`, `get_range_for_difficulty`, `update_score`) from app.py into logic_utils.py while fixing the backwards hints and updating the imports. I verified this by reviewing the code structure and running test_quick.py—all 7 assertions passed, proving the refactored code worked identically to the original (minus the bug).
-
-**Misleading Suggestion:** Initially, when I asked about the string conversion bug, Copilot wasn't entirely clear about why comparing `int` with `str` breaks Python's comparison operators. Its explanation suggested the bug might be intentional for "edge case handling," which was incorrect. I had to manually test and verify that the string conversion was purely buggy—not a feature—by checking what happens when `42 > "42"` (TypeError). The AI's follow-up explanation after clarification was accurate.
+**Course:** AI110 — Foundations of AI Engineering  
+**Module:** 5 — Agentic Workflows & Reliability  
+**Author:** Branden Bedoya  
+**Base project:** [Module 1 — Game Glitch Investigator](https://github.com/BrandenBedoya/ai110-module1show-gameglitchinvestigator-starter)
 
 ---
 
-## 3. Debugging and testing your fixes
+## What I Built and Why
 
-I used a **three-layer testing approach**:
+In Module 1, I manually debugged a broken Streamlit number-guessing game — fixing backwards hints,
+a state-reset bug, and a type mismatch. The process was instructive, but entirely manual.
 
-**Manual gameplay testing:** I played the game and confirmed that guessing 1 (the minimum) no longer told me to "go lower." Each guess now displays the correct directional hint.
+For the capstone, I asked: *what if the AI could do what I did?*
 
-**Unit testing with test_quick.py:** I created an automated test file that validates all refactored logic functions independently:
-- `check_guess(50, 25)` returns `('Too High', '📉 Go LOWER!')` ✓
-- `parse_guess('42.5')` correctly converts floats to integers ✓  
-- `get_range_for_difficulty()` returns the correct ranges for each difficulty ✓
-- `update_score()` applies the correct scoring rules for each outcome ✓
-
-All 7 test cases passed, proving the refactored code maintained the original functionality while fixing the bugs.
-
-**Developer Debug Tab:** The "Developer Debug Info" expander in the Streamlit app showed me the actual secret number, allowing me to verify that my guesses were being compared correctly against it and that the game state remained stable across multiple guesses.
-
-By combining automated tests with manual gameplay verification, I could be confident that the fixes were complete, correct, and didn't introduce new bugs.
+The result is a system that takes any Python game code snippet, retrieves relevant bug patterns
+from a curated knowledge base, and uses Claude to reason about the specific bugs in the submitted
+code — producing a structured Bug Report with root causes and fix suggestions.
 
 ---
 
-## 4. What did you learn about Streamlit and state?
+## Design Decisions
 
-The secret number wasn't actually changing on every rerun—the session state was properly initialized and persisted. The real issue was that on even-numbered attempts, the code was converting the secret to a string while the guess remained an integer, causing string comparison instead of numeric comparison, which broke the game logic. Streamlit "reruns" the entire script whenever a user interacts with the app (like clicking a button), but `st.session_state` preserves variables across reruns so the game state persists. I fixed the stability by removing the problematic string conversion and ensuring the secret and guess were always compared as the same type (integers).
+### RAG without heavy dependencies
+I chose TF-IDF + cosine similarity (scikit-learn) instead of a dense embedding model like
+`sentence-transformers`. This keeps the dependency footprint small, eliminates the need for a
+model download on first run, and is fast enough for a 15-pattern knowledge base.
+
+The trade-off: TF-IDF misses semantic similarity (e.g. "flip the direction" won't match
+"backwards hint" as well as a dense model would). For this domain and corpus size, keyword
+overlap is sufficient.
+
+### Agentic tool use rather than a single prompt
+Early iterations just sent the code directly to Claude with a `here are the bug patterns` block
+in the prompt. That worked but felt like a lookup table, not reasoning.
+
+Switching to tool use meant Claude *decides* when and how to search, and can make multiple
+targeted queries. It makes the system more explainable: the tool call trace shows exactly what
+the agent was looking for at each step.
+
+### Prompt caching
+The system prompt (role description, output format, severity table) is static across all requests.
+Marking it with `"cache_control": {"type": "ephemeral"}` means Anthropic caches it for up to 5
+minutes, reducing both latency and token cost on back-to-back analyses.
+
+### Pydantic v2 guardrails at the entry point
+I validated inputs before they reach Claude rather than inside the agent. This keeps the agent
+code clean and makes it easy to test the validation layer in isolation. The guardrails block:
+
+- Empty or oversized inputs
+- Prompt injection phrases
+- Shell execution patterns (os.system, subprocess, eval)
+
+They do NOT attempt to detect all possible malicious inputs — that would require a dedicated
+content classifier. The goal was to add a meaningful first line of defence, not a complete one.
 
 ---
 
-## 5. Looking ahead: your developer habits
+## What Worked Well
 
-One habit I'm taking forward is **manual testing first, automation second**—before running unit tests, I played the game multiple times and used the debug tab to verify behavior. This helped me catch both bugs immediately. Next time I work with AI on a coding task, I'll be more skeptical of AI-generated logic and trace through the code path myself rather than trusting the implementation—in this case, the backwards hints seemed intentional at first glance but manual testing revealed the problem. This project reinforced that AI-generated code is a starting point, not gospel: even seemingly simple logic like comparison operators can have subtle bugs hiding in plain sight that only become obvious when you actually use the code and verify it works the way you expect.
+**The RAG retrieval is accurate for known patterns.** On every test scenario, the agent retrieved
+at least one relevant pattern within the top 3 results, and the pattern descriptions contained
+enough context to ground Claude's analysis.
 
+**The agentic loop is predictable.** Claude consistently uses the `search_bug_patterns` tool on
+the first iteration and produces a final answer on the second. The max-iterations guard (6) was
+never triggered in testing.
 
+**The evaluation framework is meaningful.** The keyword + type-match scoring gives a quantitative
+view of reliability without needing human labellers. Running `eval.py` produces a reproducible
+JSON report that can be tracked over time.
+
+---
+
+## What I'd Improve with More Time
+
+1. **Dense embeddings for RAG.** Swapping TF-IDF for `sentence-transformers` (all-MiniLM-L6-v2)
+   would improve retrieval on semantically related but lexically different queries.
+
+2. **Structured output parsing.** Currently the agent's Bug Report is freeform markdown. Adding
+   a second pass that parses it into a `DebugReport` Pydantic model would enable richer UI
+   rendering (expandable findings, severity badges, etc.).
+
+3. **More scenarios.** Five scenarios cover the most common bugs but miss things like off-by-one
+   errors, mutable default arguments, and import failures. A larger eval set would surface edge
+   cases in the agent's reasoning.
+
+4. **Persistent vector store.** For a larger knowledge base, ChromaDB or FAISS with a stored
+   index would be faster than rebuilding the TF-IDF matrix on every startup.
+
+5. **User feedback loop.** A thumbs-up/thumbs-down on each report could be stored to identify
+   systematically weak areas in the knowledge base.
+
+---
+
+## AI Collaboration Notes
+
+Claude Code (claude-sonnet-4-6) was used as the primary development assistant throughout:
+
+- **Architecture design**: I described the goals and Claude proposed the modular `src/` layout,
+  which I reviewed and adjusted (e.g. choosing TF-IDF over sentence-transformers).
+- **Boilerplate generation**: `__init__.py`, `.gitignore`, conftest setup — all generated and
+  accepted without modification.
+- **Prompt engineering**: The system prompt went through two revisions. The first was too
+  prescriptive ("step 1, step 2, step 3"). The final version uses a format guide instead,
+  giving Claude more flexibility to organise the report.
+- **Test coverage**: Claude identified the score-floor regression test and the backwards-hint
+  regression test as the two highest-value cases. Both were included.
+
+The main area where I overrode Claude's suggestions was dependency selection — it initially
+proposed ChromaDB + sentence-transformers, which I replaced with sklearn for portability.
+
+---
+
+## Lessons Learned
+
+1. **Agentic ≠ more iterations.** A well-scoped tool and clear system prompt means the agent
+   can solve most cases in a single tool call. Complexity adds cost, not quality.
+
+2. **Evaluation design is part of the system.** I defined the scoring criteria before writing
+   the agent, which forced me to be precise about what "a correct analysis" actually means.
+
+3. **Guardrails should be proportionate.** I blocked the most obvious injection vectors without
+   trying to build an exhaustive content filter. Perfect safety is impossible at this layer;
+   the goal is meaningful friction, not false confidence.
+
+4. **The knowledge base is the soul of a RAG system.** Getting the 15 patterns right — accurate
+   symptoms, precise code smells, good tags — mattered more than the retrieval algorithm.

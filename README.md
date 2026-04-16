@@ -1,70 +1,204 @@
-# 🎮 Game Glitch Investigator: The Impossible Guesser
+# GameGlitch Investigator v2 — Applied AI System
 
-## 🚨 The Situation
+> **AI110 Module 5 Capstone** | Branden Bedoya
+>
+> An extension of the Module 1 Game Glitch Investigator that evolves a manual debugging exercise
+> into a full applied AI system — combining RAG retrieval, an agentic Claude workflow, Pydantic
+> guardrails, and a structured reliability evaluation framework.
 
-You asked an AI to build a simple "Number Guessing Game" using Streamlit.
-It wrote the code, ran away, and now the game is unplayable. 
+---
 
-- You can't win.
-- The hints lie to you.
-- The secret number seems to have commitment issues.
+## System Architecture
 
-## 🛠️ Setup
+```mermaid
+graph TB
+    subgraph UI["🖥️ Streamlit UI  (app.py)"]
+        T1["Tab 1: Play the Game"]
+        T2["Tab 2: AI Bug Lab"]
+        T3["Tab 3: Eval Dashboard"]
+    end
 
-1. Install dependencies: `pip3 install -r requirements.txt`
-2. Run the fixed app: `python3 -m streamlit run app.py`
-   - Note: Use `python3` on macOS if `python` defaults to Python 2
+    subgraph Guard["🛡️ Guardrails  (validators.py)"]
+        IV["CodeInput\nPydantic validator"]
+        OV["DebugReport\nPydantic model"]
+    end
 
-## 🕵️‍♂️ Your Mission
+    subgraph Agent["🤖 Debug Agent  (debug_agent.py)"]
+        CL["Claude claude-sonnet-4-6\n(Tool Use + Prompt Caching)"]
+        TU["search_bug_patterns\ntool"]
+    end
 
-1. **Play the game.** Open the "Developer Debug Info" tab in the app to see the secret number. Try to win.
-2. **Find the State Bug.** Why does the secret number change every time you click "Submit"? Ask ChatGPT: *"How do I keep a variable from resetting in Streamlit when I click a button?"*
-3. **Fix the Logic.** The hints ("Higher/Lower") are wrong. Fix them.
-4. **Refactor & Test.** - Move the logic into `logic_utils.py`.
-   - Run `pytest` in your terminal.
-   - Keep fixing until all tests pass!
+    subgraph RAG["📚 RAG Layer  (retriever.py)"]
+        KBJ["bug_patterns.json\n15 curated patterns"]
+        TF["TF-IDF Vectorizer"]
+        CS["Cosine Similarity"]
+    end
 
-## 📝 Document Your Experience
+    subgraph Game["🎮 Game Logic  (logic_utils.py)"]
+        GL["check_guess · parse_guess\nupdate_score · get_range"]
+    end
 
-✅ **Game's Purpose:** A number-guessing game built with Streamlit where players try to guess a random number within attempts. The game provides hints about whether guesses are too high or too low, with a scoring system based on performance.
-
-✅ **Bugs Found & Fixed:**
-1. **Backwards Hint Logic** - When a guess was too high, the game said "Go HIGHER!" (should be "Go LOWER!")
-2. **String Conversion Bug** - On even-numbered attempts, the secret was converted to a string, breaking type comparison with integer guesses
-3. **Type Mismatch** - Comparing `int` vs `str` caused TypeError that triggered fallback logic with even MORE backwards hints
-
-✅ **Fixes Applied:**
-1. Refactored game logic into `logic_utils.py` for separation of concerns
-2. Fixed `check_guess()` function to return correct hint messages in all cases
-3. Removed buggy string conversion on even attempts
-4. Created `test_quick.py` with 7 passing unit tests validating all logic
-5. Updated `reflection.md` with detailed AI collaboration documentation
-
-## 📸 Demo
-
-✅ **Game Fixed!** The game now plays correctly:
-- Hints are directionally accurate ("Go LOWER!" when guess is too high)
-- Secret number remains stable throughout gameplay
-- Win condition works properly
-- All 7 unit tests pass successfully
-
-**Testing Results:**
-```
-✅ test_quick.py - 7/7 tests PASSING
-✅ Manual gameplay verified
-✅ Type safety confirmed (no more string/int comparison errors)
+    T2 --> IV
+    IV -->|validated code| CL
+    CL -->|tool call| TU
+    TU --> CS
+    CS --> TF
+    TF --> KBJ
+    KBJ -->|ranked patterns| CL
+    CL -->|bug report| OV
+    OV --> T2
+    T3 -->|eval scenarios| CL
+    T1 --> GL
 ```
 
-## 🚀 Stretch Features
+---
 
-- [ ] Challenge 1: Advanced Edge-Case Testing - Extended test coverage
-- [ ] Challenge 4: Enhanced Game UI - Additional UI improvements
+## Features
 
-## 🤖 AI-Assisted Development
+| Feature | Description | Module Connection |
+|---|---|---|
+| **Playable game** | Original Glitchy Guesser with all Module 1 bugs fixed | Module 1 |
+| **RAG knowledge base** | 15 curated bug patterns, TF-IDF indexed | Module 3-4 |
+| **AI Debug Agent** | Claude claude-sonnet-4-6 with tool use — agentic multi-step analysis | Module 5 |
+| **Prompt caching** | System prompt cached across API calls to reduce latency | Module 5 |
+| **Guardrails** | Pydantic v2 input validation, injection protection, length limits | Module 5 |
+| **Reliability eval** | 5 scenario test suite with keyword + type-match scoring | Module 5 |
+| **Standalone eval script** | `eval.py` outputs JSON results for reproducible benchmarking | Module 5 |
 
-This project was debugged with GitHub Copilot as a teammate:
-- **Copilot+ correctly** identified backwards hint logic ✓
-- **Copilot+ correctly** refactored code to logic_utils.py with Agent mode ✓
-- **Copilot+ misleading** initially on string conversion bug importance
+---
 
-See [reflection.md](reflection.md) for detailed AI collaboration process and lessons learned.
+## Quickstart
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/BrandenBedoya/ai110-applied-ai-system-project-gameglitch-investigator.git
+cd ai110-applied-ai-system-project-gameglitch-investigator
+```
+
+### 2. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Add your API key
+
+```bash
+cp .env.example .env
+# Edit .env and set ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### 4. Run the app
+
+```bash
+streamlit run app.py
+```
+
+### 5. Run tests (no API key needed for unit + guardrail tests)
+
+```bash
+pytest tests/test_game_logic.py tests/test_guardrails.py tests/test_reliability.py::TestRetriever -v
+```
+
+### 6. Run the reliability evaluation
+
+```bash
+python eval.py
+python eval.py --verbose   # includes full agent report previews
+```
+
+---
+
+## Project Structure
+
+```
+.
+├── assets/                    # Architecture diagrams and screenshots
+├── src/
+│   ├── game/
+│   │   ├── logic_utils.py     # Game logic (from Module 1, improved)
+│   │   └── scenarios.py       # 5 buggy code scenarios for testing
+│   ├── rag/
+│   │   ├── bug_patterns.json  # 15-pattern knowledge base
+│   │   └── retriever.py       # TF-IDF + cosine similarity retrieval
+│   ├── agent/
+│   │   ├── prompts.py         # Claude system + user prompts
+│   │   └── debug_agent.py     # Agentic tool-use loop
+│   └── guardrails/
+│       └── validators.py      # Pydantic v2 input/output models
+├── tests/
+│   ├── test_game_logic.py     # Unit tests (game)
+│   ├── test_guardrails.py     # Unit tests (validators)
+│   └── test_reliability.py    # Retriever + agent reliability tests
+├── app.py                     # Streamlit frontend (3 tabs)
+├── eval.py                    # Standalone evaluation script
+├── requirements.txt
+├── .env.example
+└── reflection.md
+```
+
+---
+
+## AI Components Explained
+
+### RAG Knowledge Base
+`src/rag/bug_patterns.json` contains 15 hand-curated bug patterns covering:
+- Logic errors (backwards hints, wrong formulas, operator mistakes)
+- State management bugs (Streamlit session_state, reset failures)
+- Type errors (int vs string comparison)
+- Input validation gaps
+- Control flow issues (missing game-over guards)
+
+The `BugRetriever` class builds a TF-IDF index at startup and returns top-k patterns
+ranked by cosine similarity for any query.
+
+### Agentic Debug Agent
+`src/agent/debug_agent.py` implements a multi-step tool-use loop:
+
+1. Claude receives the submitted code and a prompt to call `search_bug_patterns` first.
+2. Claude calls the tool with a relevant query.
+3. The tool executes RAG retrieval and returns ranked patterns.
+4. Claude synthesises the retrieved patterns with its own code analysis.
+5. Claude produces a structured Bug Report (no further tool calls).
+
+The system prompt is cached using Anthropic's prompt caching feature to reduce API latency
+on repeated calls.
+
+### Guardrails
+`src/guardrails/validators.py` uses Pydantic v2 to:
+- Reject empty or oversized code submissions (>5000 chars)
+- Block prompt injection attempts
+- Block shell execution patterns (os.system, subprocess, eval)
+- Truncate context strings to 500 characters
+- Validate and clamp structured output fields (confidence, severity, bug count)
+
+### Reliability Scoring
+Each evaluation scenario has a documented `expected_bug_type` and `expected_keywords`.
+The agent is scored on:
+- **50%** — whether the expected bug type appears in the report
+- **50%** — fraction of expected keywords found in the report
+
+---
+
+## Improvements Over Module 1
+
+| Area | Module 1 | v2 (Capstone) |
+|---|---|---|
+| Debugging | Manual, human-only | AI agent with RAG-augmented analysis |
+| Bug detection | Pre-identified bugs in starter code | Generalises to any submitted Python snippet |
+| Architecture | Single `app.py` + `logic_utils.py` | Modular `src/` package with clean separation |
+| Testing | 7 unit tests | 30+ tests across game, guardrails, and retriever |
+| Score bug | Score can go negative | Floored at 0 with `max(0, ...)` |
+| State keys | Single-scope, difficulty-collision risk | Difficulty-scoped keys prevent state collisions |
+
+---
+
+## Portfolio Notes
+
+This project demonstrates:
+- **Retrieval-Augmented Generation (RAG)** without heavy ML dependencies
+- **Agentic AI** using the Anthropic tool-use API
+- **Responsible AI design**: input guardrails, output validation, and structured evaluation
+- **Clean Python architecture**: modular `src/` layout, Pydantic models, typed interfaces
+- **Reliability mindset**: automated test suite + eval script with JSON output
