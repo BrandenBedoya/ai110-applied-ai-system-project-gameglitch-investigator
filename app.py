@@ -103,10 +103,44 @@ with tab1:
                 st.success(f"You already won! Score: **{score}**. Click New Game to play again.")
             else:
                 st.error(f"Game over! The secret was **{secret}**. Score: {score}.")
+            # Ensure the "New Game" button is always visible after the game ends
+            new_game_clicked = st.button("New Game", key=f"newgame_{pfx}_end")
+            if new_game_clicked:
+                for k in [f"{pfx}_secret", f"{pfx}_attempts", f"{pfx}_score",
+                          f"{pfx}_status", f"{pfx}_history"]:
+                    if k in st.session_state:
+                        del st.session_state[k]
+                st.rerun()
         else:
             st.info(f"Guess a number between **{low}** and **{high}**. Attempts left: **{remaining}**")
 
-            raw_guess = st.text_input("Your guess:", key=f"input_{pfx}")
+            # Define a callback function for the text input
+            def submit_guess_callback():
+                st.session_state[f"{pfx}_attempts"] += 1
+                ok, guess_int, err = parse_guess(st.session_state[f"input_{pfx}"])
+                if not ok:
+                    st.error(err)
+                else:
+                    outcome, msg = check_guess(guess_int, secret)
+                    st.session_state[f"{pfx}_history"].append(guess_int)
+                    st.session_state[f"{pfx}_score"] = update_score(
+                        score, outcome, st.session_state[f"{pfx}_attempts"]
+                    )
+                    if show_hint:
+                        st.warning(msg)
+                    if outcome == "Win":
+                        st.balloons()
+                        st.session_state[f"{pfx}_status"] = "won"
+                        st.success(
+                            f"Correct! Score: **{st.session_state[f'{pfx}_score']}**"
+                        )
+                    elif st.session_state[f"{pfx}_attempts"] >= attempt_limit:
+                        st.session_state[f"{pfx}_status"] = "lost"
+                        st.error(f"Out of attempts! The number was **{secret}**.")
+
+            raw_guess = st.text_input(
+                "Your guess:", key=f"input_{pfx}", on_change=submit_guess_callback
+            )
             c1, c2, c3 = st.columns(3)
             with c1:
                 submit = st.button("Submit Guess", key=f"submit_{pfx}")
@@ -124,7 +158,7 @@ with tab1:
 
             if submit:
                 st.session_state[f"{pfx}_attempts"] += 1
-                ok, guess_int, err = parse_guess(raw_guess)
+                ok, guess_int, err = parse_guess(st.session_state[f"input_{pfx}"])
                 if not ok:
                     st.error(err)
                 else:
